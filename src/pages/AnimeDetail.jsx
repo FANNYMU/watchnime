@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import Layout from "../components/layout/Layout";
-import * as animeService from "../services/animeService";
 import {
   FaStar,
   FaHeart,
@@ -18,22 +17,57 @@ const AnimeDetail = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [showFullSynopsis, setShowFullSynopsis] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
+  const [inList, setInList] = useState(false);
+  const [listStatus, setListStatus] = useState("");
 
   useEffect(() => {
     const fetchAnimeDetail = async () => {
       try {
         setIsLoading(true);
-        const data = await animeService.getAnimeData();
-
-        if (data && data.anime) {
-          const animeDetail = data.anime.find(
-            (a) => a.mal_id.toString() === id || a.id.toString() === id
+        
+        // Try to find anime in both data sources
+        let animeDetail = null;
+        
+        // First check anime-list.json
+        const animeListResponse = await fetch('/api/anime-list.json');
+        const animeListData = await animeListResponse.json();
+        
+        if (animeListData && animeListData.data) {
+          animeDetail = animeListData.data.find(
+            (a) => a.mal_id.toString() === id
           );
-          if (animeDetail) {
-            setAnime(animeDetail);
-          } else {
-            console.error("Anime not found with ID:", id);
+        }
+        
+        // If not found, check new-seasons.json
+        if (!animeDetail) {
+          const newSeasonsResponse = await fetch('/api/new-seasons.json');
+          const newSeasonsData = await newSeasonsResponse.json();
+          
+          if (newSeasonsData && newSeasonsData.data) {
+            animeDetail = newSeasonsData.data.find(
+              (a) => a.mal_id.toString() === id
+            );
           }
+        }
+        
+        if (animeDetail) {
+          setAnime(animeDetail);
+          console.log("Found anime:", animeDetail);
+          
+          // Check if anime is in user's list
+          const savedList = localStorage.getItem("myAnimeList");
+          if (savedList) {
+            const myList = JSON.parse(savedList);
+            const inListItem = myList.find(
+              (item) => item.anime.mal_id === animeDetail.mal_id
+            );
+            if (inListItem) {
+              setInList(true);
+              setListStatus(inListItem.status);
+            }
+          }
+        } else {
+          console.error("Anime not found with ID:", id);
         }
       } catch (error) {
         console.error("Error fetching anime detail:", error);
@@ -47,53 +81,27 @@ const AnimeDetail = () => {
     }
   }, [id]);
 
-  // Cek apakah anime sudah ditambahkan ke daftar
-  const [inList, setInList] = useState(false);
-  const [listStatus, setListStatus] = useState("");
-
-  useEffect(() => {
-    if (anime) {
-      // Cek localStorage untuk status anime
-      const savedList = localStorage.getItem("myAnimeList");
-      if (savedList) {
-        const parsedList = JSON.parse(savedList);
-        const animeInList = parsedList.find(
-          (item) => item.anime.mal_id === anime.mal_id
-        );
-
-        if (animeInList) {
-          setInList(true);
-          setListStatus(animeInList.status);
-        } else {
-          setInList(false);
-          setListStatus("");
-        }
-      }
-    }
-  }, [anime]);
-
   // Tambahkan anime ke daftar
   const addToList = (status) => {
     const savedList = localStorage.getItem("myAnimeList");
     let myList = savedList ? JSON.parse(savedList) : [];
-
-    // Cek apakah anime sudah ada di daftar
-    const existingIndex = myList.findIndex(
-      (item) => item.anime.mal_id === anime.mal_id
-    );
-
-    if (existingIndex !== -1) {
-      // Update status jika sudah ada
-      myList[existingIndex].status = status;
-    } else {
-      // Tambahkan baru jika belum ada
-      myList.push({
-        anime: anime,
-        status: status,
-        addedAt: new Date().toISOString(),
-      });
-    }
-
+    
+    // Hapus jika sudah ada
+    myList = myList.filter((item) => item.anime.mal_id !== anime.mal_id);
+    
+    // Tambahkan ke daftar dengan status baru
+    myList.push({
+      anime: {
+        mal_id: anime.mal_id,
+        title: anime.title,
+        image: anime.images?.jpg?.image_url || anime.images?.webp?.image_url,
+        episodes: anime.episodes,
+        type: anime.type,
+      },
+      status,
+      addedAt: new Date().toISOString(),
+    });
+    
     localStorage.setItem("myAnimeList", JSON.stringify(myList));
     setInList(true);
     setListStatus(status);
@@ -162,23 +170,25 @@ const AnimeDetail = () => {
     );
   }
 
+  // Debugging - log the image URL
+  console.log("Background image URL:", anime.images?.jpg?.large_image_url || anime.images?.webp?.large_image_url);
+
   return (
     <Layout>
       {/* Header/Banner */}
-      <div
-        className="relative w-full h-80 md:h-96"
-        style={{
-          backgroundImage: `url(${
-            anime.images?.jpg?.large_image_url ||
-            anime.images?.webp?.large_image_url
-          })`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      >
-        {/* Overlay gradasi untuk keterbacaan teks */}
-        <div className="absolute inset-0 bg-gradient-to-t from-dark-bg via-dark-bg/70 to-transparent"></div>
-        <div className="absolute inset-0 bg-gradient-to-r from-dark-bg via-dark-bg/70 to-transparent"></div>
+      <div className="relative w-full h-80 md:h-96 bg-dark-surface">
+        {anime.images?.jpg?.large_image_url && (
+          <div 
+            className="absolute inset-0 bg-center bg-cover"
+            style={{
+              backgroundImage: `url(${anime.images.jpg.large_image_url})`,
+            }}
+          >
+            {/* Overlay gradasi untuk keterbacaan teks */}
+            <div className="absolute inset-0 bg-gradient-to-t from-dark-bg via-dark-bg/70 to-transparent"></div>
+            <div className="absolute inset-0 bg-gradient-to-r from-dark-bg via-dark-bg/70 to-transparent"></div>
+          </div>
+        )}
 
         {/* Hero content container */}
         <div className="container mx-auto px-4 h-full relative z-10">
@@ -203,98 +213,70 @@ const AnimeDetail = () => {
                 </p>
               )}
 
-              <div className="flex flex-wrap gap-2 mb-4">
-                <span className="px-2 py-1 bg-primary/90 rounded text-xs font-medium">
-                  {anime.type || "TV"}
-                </span>
-                <span className="px-2 py-1 bg-white/10 backdrop-blur-sm rounded text-xs">
-                  {anime.episodes
-                    ? `${anime.episodes} Episode`
-                    : "Unknown Episodes"}
-                </span>
+              {/* Rating dan Status */}
+              <div className="flex flex-wrap items-center gap-3 mt-2 mb-4">
+                {anime.score && (
+                  <div className="flex items-center bg-yellow-400/20 text-yellow-400 px-2 py-1 rounded">
+                    <FaStar className="mr-1" />
+                    <span>{anime.score}</span>
+                  </div>
+                )}
                 {anime.status && (
-                  <span className="px-2 py-1 bg-white/10 backdrop-blur-sm rounded text-xs">
+                  <div className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-sm">
                     {anime.status}
-                  </span>
+                  </div>
                 )}
                 {anime.rating && (
-                  <span className="px-2 py-1 bg-white/10 backdrop-blur-sm rounded text-xs">
+                  <div className="bg-gray-500/20 text-gray-300 px-2 py-1 rounded text-sm">
                     {anime.rating}
-                  </span>
+                  </div>
                 )}
               </div>
 
-              <div className="flex flex-wrap gap-4 mb-4">
-                <div className="flex items-center">
-                  <FaStar className="text-yellow-400 mr-1" />
-                  <span className="font-bold text-white">
-                    {anime.score || "-"}
-                  </span>
-                  <span className="text-gray-400 text-sm ml-1">
-                    (
-                    {anime.scored_by
-                      ? `${(anime.scored_by / 1000).toFixed(1)}K`
-                      : "0"}
-                    )
-                  </span>
-                </div>
-                <div className="flex items-center">
-                  <FaHeart className="text-red-500 mr-1" />
-                  <span className="text-white">
-                    {anime.favorites
-                      ? `${(anime.favorites / 1000).toFixed(1)}K`
-                      : "0"}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex gap-3 mt-4">
-                <button className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary-darker rounded-full font-medium transition shadow-purple hover:shadow-md">
-                  <FaPlay />
-                  Watch Now
-                </button>
-
+              {/* Actions */}
+              <div className="flex flex-wrap gap-3 mt-4">
                 {inList ? (
                   <div className="relative group">
-                    <button className="flex items-center gap-2 px-5 py-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full font-medium transition shadow-md">
-                      <FaBookmark className="text-primary" />
+                    <button className="flex items-center gap-2 px-5 py-2 bg-primary hover:bg-primary-darker rounded-full font-medium transition shadow-md">
+                      <FaBookmark className="text-white" />
                       {listStatus === "watching" && "Sedang Ditonton"}
                       {listStatus === "completed" && "Selesai"}
-                      {listStatus === "planning" && "Direncanakan"}
+                      {listStatus === "planning" && "Rencana"}
+                      {listStatus === "dropped" && "Berhenti"}
                     </button>
-
-                    <div className="absolute right-0 mt-2 w-40 bg-dark-surface/90 backdrop-blur-md rounded-md shadow-lg shadow-black/50 py-1 z-10 invisible group-hover:visible">
+                    <div className="absolute left-0 mt-2 w-48 bg-dark-surface rounded-lg shadow-lg overflow-hidden z-30 hidden group-hover:block">
                       <button
                         onClick={() => addToList("watching")}
-                        className={`block w-full text-left px-4 py-2 text-sm text-white hover:bg-primary/20 transition-colors ${
-                          listStatus === "watching" ? "text-primary" : ""
-                        }`}
+                        className="w-full text-left px-4 py-2 hover:bg-dark-bg/80 transition"
                       >
                         Sedang Ditonton
                       </button>
                       <button
                         onClick={() => addToList("completed")}
-                        className={`block w-full text-left px-4 py-2 text-sm text-white hover:bg-primary/20 transition-colors ${
-                          listStatus === "completed" ? "text-primary" : ""
-                        }`}
+                        className="w-full text-left px-4 py-2 hover:bg-dark-bg/80 transition"
                       >
                         Selesai
                       </button>
                       <button
                         onClick={() => addToList("planning")}
-                        className={`block w-full text-left px-4 py-2 text-sm text-white hover:bg-primary/20 transition-colors ${
-                          listStatus === "planning" ? "text-primary" : ""
-                        }`}
+                        className="w-full text-left px-4 py-2 hover:bg-dark-bg/80 transition"
                       >
-                        Direncanakan
+                        Rencana
                       </button>
-                      <hr className="my-1 border-white/10" />
                       <button
-                        onClick={removeFromList}
-                        className="block w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-500/10 transition-colors"
+                        onClick={() => addToList("dropped")}
+                        className="w-full text-left px-4 py-2 hover:bg-dark-bg/80 transition"
                       >
-                        Hapus dari daftar
+                        Berhenti
                       </button>
+                      <div className="border-t border-dark-bg">
+                        <button
+                          onClick={removeFromList}
+                          className="w-full text-left px-4 py-2 text-red-500 hover:bg-dark-bg/80 transition"
+                        >
+                          Hapus dari daftar
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -365,7 +347,9 @@ const AnimeDetail = () => {
                   <div>
                     <span className="text-gray-400">Musim:</span>
                     <span className="text-white ml-2">
-                      {anime.season} {anime.year}
+                      {anime.season.charAt(0).toUpperCase() +
+                        anime.season.slice(1)}{" "}
+                      {anime.year}
                     </span>
                   </div>
                 )}
@@ -373,47 +357,56 @@ const AnimeDetail = () => {
                   <div>
                     <span className="text-gray-400">Studio:</span>
                     <span className="text-white ml-2">
-                      {anime.studios.map((studio) => studio.name).join(", ")}
+                      {anime.studios.map((s) => s.name).join(", ")}
                     </span>
-                  </div>
-                )}
-                {anime.source && (
-                  <div>
-                    <span className="text-gray-400">Sumber:</span>
-                    <span className="text-white ml-2">{anime.source}</span>
-                  </div>
-                )}
-                {anime.rating && (
-                  <div>
-                    <span className="text-gray-400">Rating:</span>
-                    <span className="text-white ml-2">{anime.rating}</span>
                   </div>
                 )}
               </div>
             </div>
 
+            {/* Genres */}
             {anime.genres && anime.genres.length > 0 && (
               <div className="bg-dark-surface rounded-lg p-4 mb-4">
                 <h3 className="font-semibold text-white mb-2">Genre</h3>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1">
                   {anime.genres.map((genre) => (
-                    <Link
+                    <span
                       key={genre.mal_id}
-                      to={`/browse?genre=${genre.name}`}
-                      className="bg-primary/20 text-primary text-xs px-2 py-1 rounded-md hover:bg-primary/30 transition"
+                      className="bg-primary/20 text-primary px-2 py-1 rounded text-xs"
                     >
                       {genre.name}
-                    </Link>
+                    </span>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Score */}
+            {anime.score && (
+              <div className="bg-dark-surface rounded-lg p-4 mb-4">
+                <h3 className="font-semibold text-white mb-2">Skor</h3>
+                <div className="flex items-center">
+                  <div className="text-3xl font-bold text-white mr-2">
+                    {anime.score}
+                  </div>
+                  <div className="text-yellow-400">
+                    <FaStar />
+                  </div>
+                </div>
+                <div className="text-xs text-gray-400 mt-1">
+                  {anime.scored_by
+                    ? `${anime.scored_by.toLocaleString()} pengguna`
+                    : ""}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Content tabs */}
+          {/* Main content */}
           <div className="flex-1">
-            <div className="border-b border-gray-700 mb-6">
-              <div className="flex overflow-x-auto no-scrollbar space-x-4">
+            {/* Tabs */}
+            <div className="mb-6 border-b border-dark-surface">
+              <div className="flex overflow-x-auto">
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
@@ -467,20 +460,39 @@ const AnimeDetail = () => {
                     </div>
                   </div>
 
-                  {/* Trailer */}
-                  {anime.trailer?.embed_url && (
+                  {/* Background */}
+                  {anime.background && (
                     <div className="mb-6">
                       <h2 className="text-xl font-bold text-white mb-3">
-                        Trailer
+                        Latar Belakang
                       </h2>
-                      <div className="aspect-video overflow-hidden rounded-lg">
-                        <iframe
-                          src={anime.trailer.embed_url}
-                          title={`${anime.title} trailer`}
-                          className="w-full h-full"
-                          allowFullScreen
-                          frameBorder="0"
-                        ></iframe>
+                      <div className="bg-dark-surface rounded-lg p-4">
+                        <p className="text-gray-300">{anime.background}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Related Anime */}
+                  {anime.relations && anime.relations.length > 0 && (
+                    <div>
+                      <h2 className="text-xl font-bold text-white mb-3">
+                        Anime Terkait
+                      </h2>
+                      <div className="bg-dark-surface rounded-lg p-4">
+                        <ul className="space-y-2">
+                          {anime.relations.map((relation, idx) => (
+                            <li key={idx}>
+                              <span className="text-gray-400">
+                                {relation.relation}:{" "}
+                              </span>
+                              <span className="text-white">
+                                {relation.entry
+                                  .map((entry) => entry.name)
+                                  .join(", ")}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     </div>
                   )}
@@ -492,46 +504,35 @@ const AnimeDetail = () => {
                   <h2 className="text-xl font-bold text-white mb-3">
                     Daftar Episode
                   </h2>
-                  <div className="bg-dark-surface rounded-lg p-4">
-                    {anime.episodes ? (
-                      <ul className="divide-y divide-gray-700">
-                        {[...Array(anime.episodes)].map((_, index) => {
-                          // Membuat URL streaming untuk episode
-                          const streamingUrl =
-                            anime.streaming_urls?.[index] ||
-                            `https://watchnime.com/watch/${anime.mal_id}/${
-                              index + 1
-                            }`;
-
-                          return (
-                            <li key={index} className="py-3">
-                              <div className="flex justify-between items-center">
-                                <div>
-                                  <span className="text-lg font-medium text-white">
-                                    Episode {index + 1}
-                                  </span>
-                                  <p className="text-sm text-gray-400">
-                                    {anime.title} - Episode {index + 1}
-                                  </p>
-                                </div>
-                                <a
-                                  href={streamingUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-1 px-3 py-1 bg-white/10 hover:bg-primary/80 rounded-full text-sm transition-colors"
-                                >
-                                  <FaPlay className="text-xs" />
-                                  Watch
-                                </a>
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
+                  <div className="space-y-4">
+                    {anime.episodes && anime.episodes > 0 ? (
+                      [...Array(parseInt(anime.episodes))].map((_, index) => (
+                        <div 
+                          key={index} 
+                          className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 bg-dark-surface rounded-lg hover:bg-dark-bg/80 transition"
+                        >
+                          <div className="flex items-center mb-2 md:mb-0">
+                            <div className="w-12 h-12 flex items-center justify-center bg-primary rounded-lg mr-4">
+                              <FaPlay className="text-white" />
+                            </div>
+                            <div>
+                              <h4 className="text-white font-medium">Episode {index + 1}</h4>
+                              <p className="text-gray-400 text-sm">
+                                {anime.duration || "24 min per ep"}
+                              </p>
+                            </div>
+                          </div>
+                          <button className="bg-primary hover:bg-primary-darker text-white px-4 py-2 rounded-md font-medium transition mt-2 md:mt-0">
+                            Tonton
+                          </button>
+                        </div>
+                      ))
                     ) : (
-                      <p className="text-gray-400">
-                        Tidak ada informasi episode tersedia.
-                      </p>
+                      <div className="bg-dark-surface rounded-lg p-4">
+                        <p className="text-gray-400">
+                          Tidak ada episode tersedia.
+                        </p>
+                      </div>
                     )}
                   </div>
                 </div>
