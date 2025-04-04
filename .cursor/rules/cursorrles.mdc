@@ -1,10 +1,10 @@
 ---
 description: 
-globs: *
-alwaysApply: false
+globs: 
 ---
 
 # Your rule content
 
 - jangan sok tau untuk initialisation tailwind, soalnya saya memakai yang terbaru dan jangan coba coba untuk merubahnya ingat baik baik
 - SAYA SUDAH BILANG JANGAN MERUBAH IMPORT @import "tailwindcss";
+- JANGAN MERUBAH FILE YANG BUKAN TERMASUK YANG SAYA MINTA TANPA SEIZIN SAYA!!!

@@ -254,16 +254,20 @@ export const searchAnime = (animeList, query) => {
   if (!animeList || !Array.isArray(animeList) || !query) return [];
 
   const searchTerm = query.toLowerCase().trim();
-
+  
+  // Split search term into words for more flexible matching
+  const searchWords = searchTerm.split(/\s+/).filter(word => word.length > 0);
+  
   return animeList.filter((anime) => {
     const title = anime.title?.toLowerCase() || "";
     const titleEnglish = anime.title_english?.toLowerCase() || "";
     const titleJapanese = anime.title_japanese?.toLowerCase() || "";
-
-    return (
-      title.includes(searchTerm) ||
-      titleEnglish.includes(searchTerm) ||
-      titleJapanese.includes(searchTerm)
+    
+    // Check if any of the search words are found in any of the titles
+    return searchWords.some(word => 
+      title.includes(word) || 
+      titleEnglish.includes(word) || 
+      titleJapanese.includes(word)
     );
   });
 };

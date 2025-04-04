@@ -6,6 +6,7 @@ import Upcoming from "./pages/Upcoming";
 import MyList from "./pages/MyList";
 import AnimeDetail from "./pages/AnimeDetail";
 import SeasonalPage from "./pages/Seasonal";
+import Search from "./pages/Search";
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
         <Route path="/my-list" element={<MyList />} />
         <Route path="/anime/:id" element={<AnimeDetail />} />
         <Route path="/seasonal" element={<SeasonalPage />} />
+        <Route path="/search" element={<Search />} />
         <Route path="*" element={<Home />} />
       </Routes>
     </Router>
